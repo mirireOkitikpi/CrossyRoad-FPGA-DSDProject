@@ -1,0 +1,49 @@
+# Vivado Generated Files - DO NOT COMMIT
+# These are regenerable outputs; committing them bloats the repo
+
+# Cache files
+*.cache/
+**/.Xil/
+
+# Generated IP output products (regenerated when project is opened)
+*.gen/
+
+# IP user files (sim scripts, etc. - regenerated)
+*.ip_user_files/
+
+# Synthesis and implementation runs (very large, transient)
+*.runs/
+
+# Simulation run outputs
+*.sim/
+
+# Hardware definition backup files
+*.hw/
+
+# Vivado log and journal files
+*.log
+*.jou
+
+# Temporary files
+*.str
+*.debug
+
+# Bit and binary files (large - commit selectively if needed)
+*.bit
+*.bin
+*.mcs
+*.prm
+
+# Report files generated during implementation
+*.rpt
+*.xpe
+*.xsa
+
+# -------------------------
+# Files to KEEP (tracked):
+# -------------------------
+# *.xpr       - Project file
+# *.srcs/     - Source HDL, IP core definitions (.xci), constraints (.xdc)
+# *.coe       - Coefficient files
+# *.mem       - Memory initialisation files
+# coe/        - Custom COE directory
