@@ -15,7 +15,7 @@ module lane_manager (
     input             clk,
     input             rst,
     input             game_active,
-    input      [10:0] world_y,
+    input      [10:0] logical_world_y,
 
     // ── Lane type outputs (14 lanes) ──
     output reg [1:0]  lane_type_0,  lane_type_1,  lane_type_2,
@@ -82,7 +82,7 @@ module lane_manager (
 
     // ── Scroll tracking ──
     reg [10:0] prev_world_y;
-    wire world_scrolled = (world_y != prev_world_y) && game_active;
+    wire world_scrolled = (logical_world_y != prev_world_y) && game_active;
 
     integer i;
 
@@ -142,7 +142,7 @@ module lane_manager (
             lane_obs_x[13] <= 11'd350;  lane_obs2_x[13] <= 11'd950;
 
         end else begin
-            prev_world_y <= world_y;
+            prev_world_y <= logical_world_y;
 
             // ── World scroll: discard bottom lane, shift everything down, new lane at top ──
             if (world_scrolled) begin
@@ -187,7 +187,7 @@ module lane_manager (
                 for (i = 0; i < NUM_LANES; i = i + 1) begin
                     if (lane_types[i] == LANE_ROAD || lane_types[i] == LANE_RIVER) begin
                         if (lane_dir[i] == 1'b0) begin
-                            // Scroll right — wrap around
+                            // Scroll right - wrap around
                             if (lane_obs_x[i] >= SCREEN_WIDTH)
                                 lane_obs_x[i] <= 11'd0;
                             else
@@ -198,7 +198,7 @@ module lane_manager (
                             else
                                 lane_obs2_x[i] <= lane_obs2_x[i] + {7'd0, lane_speed[i]};
                         end else begin
-                            // Scroll left — wrap around
+                            // Scroll left - wrap around
                             if (lane_obs_x[i] > SCREEN_WIDTH)
                                 lane_obs_x[i] <= SCREEN_WIDTH;
                             else if (lane_obs_x[i] < {7'd0, lane_speed[i]})
@@ -243,9 +243,7 @@ module lane_manager (
         endcase
     end
 
-    // ──────────────────────────────────────────────────────────
     // Output fan-out
-    // ──────────────────────────────────────────────────────────
     always @(*) begin
         lane_type_0  = lane_types[0];   lane_type_1  = lane_types[1];
         lane_type_2  = lane_types[2];   lane_type_3  = lane_types[3];
