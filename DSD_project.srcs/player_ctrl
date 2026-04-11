@@ -15,11 +15,11 @@ module player_ctrl (
     input             btn_right,
     input             game_active,
     
-    // ── Accelerometer Flag Handshake ──
+    // Accelerometer Flag Handshake 
     input             flick_jump_flag,   
     output reg        clear_flick_flag,  
 
-    // ── Log riding inputs (from game_top) ──
+    // Log riding inputs (from game_top) 
     input             log_carry_en,     
     input             log_carry_right,  
     input      [3:0]  log_carry_speed,  
@@ -78,7 +78,6 @@ module player_ctrl (
             is_moving        <= 1'b0;
             clear_flick_flag <= 1'b0; 
 
-            // ── THE FIX: Always clear the flag so it never gets stuck! ──
             if (flick_jump_flag) begin
                 clear_flick_flag <= 1'b1; 
                 
