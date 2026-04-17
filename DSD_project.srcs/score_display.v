@@ -1,116 +1,76 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Module:      score_display.v
-// Description:
-//   Displays current score and high score on the Nexys 4DDR's
-//   8-digit multiplexed 7-segment display.
-//
-//   Layout across the 8 digits (AN7..AN0):
-//     AN7  AN6  AN5  AN4  AN3  AN2  AN1  AN0
-//      H    i   [hi_tens] [hi_ones]  S  c  [sc_tens] [sc_ones]
-//
-//   Uses a clock divider from the 100 MHz system clock to scan
-//   through each digit at ~1 kHz (imperceptible flicker).
-//
-//   Adapted from the Flappy Bird reference project's score_display.v
-//   with modifications for Crossy Road labelling.
-//////////////////////////////////////////////////////////////////////////////////
 
-module score_display (
-    input        clk,         // System clock (100 MHz)
-    input        rst,         // Active-low reset
-    input  [7:0] score,       // Current score (0–99)
-    input  [7:0] high_score,  // High score (0–99)
-    output reg [6:0] seg,     // Segment outputs (active low: a–g)
-    output reg [7:0] an       // Anode enables (active low, one per digit)
+module score_display(
+    input clk,
+    input rst,
+    input game_over,
+    input [7:0] score,
+    input [7:0] high_score,
+    output reg [6:0] seg, // 7 segments (A-G)
+    output reg [7:0] an   // 8 anodes
 );
 
-    // ──────────────────────────────────────────────────────────
-    // Clock divider for digit scanning
-    // bits [18:16] cycle through 8 states ≈ every 2.6 ms
-    // Total scan period ≈ 8 × 2.6 ms = 20.8 ms (48 Hz)
-    // ──────────────────────────────────────────────────────────
-    reg [18:0] clkdiv;
-
+    reg [16:0] refresh_counter;
     always @(posedge clk or negedge rst) begin
-        if (!rst)
-            clkdiv <= 19'd0;
-        else
-            clkdiv <= clkdiv + 19'd1;
+        if (!rst) refresh_counter <= 0;
+        else      refresh_counter <= refresh_counter + 1;
     end
+    wire [2:0] digit_sel = refresh_counter[16:14];
 
-    wire [2:0] sel = clkdiv[18:16];
+    // Binary to BCD Conversion 
+    wire [3:0] s_ones = score % 10;
+    wire [3:0] s_tens = (score / 10) % 10;
+    wire [3:0] s_huns = score / 100;
+    
+    wire [3:0] h_ones = high_score % 10;
+    wire [3:0] h_tens = (high_score / 10) % 10;
+    wire [3:0] h_huns = high_score / 100;
 
-    // ──────────────────────────────────────────────────────────
-    // Digit value selection
-    // Special values: 10 = 'H', 11 = 'i', 12 = 'S', 13 = 'c'
-    // ──────────────────────────────────────────────────────────
-    reg [3:0] digit_val;
-
+    // Digit Selection Mux 
+    reg [3:0] current_digit;
     always @(*) begin
-        // Default: blank
-        digit_val = 4'd15;
-        an = 8'b11111111;
-
-        case (sel)
-            3'd0: begin  // AN0: score ones
-                digit_val = score % 10;
-                an = 8'b11111110;
-            end
-            3'd1: begin  // AN1: score tens
-                digit_val = score / 10;
-                an = 8'b11111101;
-            end
-            3'd2: begin  // AN2: 'c'
-                digit_val = 4'd13;
-                an = 8'b11111011;
-            end
-            3'd3: begin  // AN3: 'S'
-                digit_val = 4'd12;
-                an = 8'b11110111;
-            end
-            3'd4: begin  // AN4: high_score ones
-                digit_val = high_score % 10;
-                an = 8'b11101111;
-            end
-            3'd5: begin  // AN5: high_score tens
-                digit_val = high_score / 10;
-                an = 8'b11011111;
-            end
-            3'd6: begin  // AN6: 'i'
-                digit_val = 4'd11;
-                an = 8'b10111111;
-            end
-            3'd7: begin  // AN7: 'H'
-                digit_val = 4'd10;
-                an = 8'b01111111;
-            end
+        case (digit_sel)
+            3'd0: begin an = 8'b11111110; current_digit = s_ones; end // Rightmost (Score)
+            3'd1: begin an = 8'b11111101; current_digit = s_tens; end
+            3'd2: begin an = 8'b11111011; current_digit = s_huns; end
+            3'd3: begin an = 8'b11110111; current_digit = 4'hA;   end // Blank Space
+            3'd4: begin an = 8'b11101111; current_digit = 4'hA;   end // Blank Space
+            3'd5: begin an = 8'b11011111; current_digit = h_ones; end // Leftmost (High Score)
+            3'd6: begin an = 8'b10111111; current_digit = h_tens; end
+            3'd7: begin an = 8'b01111111; current_digit = h_huns; end
         endcase
     end
 
-    // ──────────────────────────────────────────────────────────
-    // 7-segment decoder (active low outputs)
-    //   Segment mapping: seg[6:0] = gfedcba
-    //   A '0' lights the segment, '1' turns it off
-    // ──────────────────────────────────────────────────────────
+    // ── 4. 7-Segment Hex Decoder & GAME OVER Override ──
+    // Active LOW standard: 0 turns the LED segment ON.
     always @(*) begin
-        case (digit_val)
-            4'd0:    seg = 7'b1000000;  // 0
-            4'd1:    seg = 7'b1111001;  // 1
-            4'd2:    seg = 7'b0100100;  // 2
-            4'd3:    seg = 7'b0110000;  // 3
-            4'd4:    seg = 7'b0011001;  // 4
-            4'd5:    seg = 7'b0010010;  // 5
-            4'd6:    seg = 7'b0000010;  // 6
-            4'd7:    seg = 7'b1111000;  // 7
-            4'd8:    seg = 7'b0000000;  // 8
-            4'd9:    seg = 7'b0010000;  // 9
-            4'd10:   seg = 7'b0001001;  // H
-            4'd11:   seg = 7'b1110001;  // i (segments b, c only, plus dp area)
-            4'd12:   seg = 7'b0010010;  // S (same as 5)
-            4'd13:   seg = 7'b0100111;  // c (segments d, e, g)
-            default: seg = 7'b1111111;  // blank
-        endcase
+        if (game_over) begin
+            // Displays "G A n E  O u E r" 
+            case (digit_sel)
+                3'd7: seg = 7'b0100001; // G 
+                3'd6: seg = 7'b0001000; // A 
+                3'd5: seg = 7'b0101010; // n (M)
+                3'd4: seg = 7'b0000110; // E 
+                3'd3: seg = 7'b1000000; // O 
+                3'd2: seg = 7'b1100011; // u (V)
+                3'd1: seg = 7'b0000110; // E 
+                3'd0: seg = 7'b0101111; // r 
+            endcase
+        end else begin
+            // Standard Numbers
+            case (current_digit)
+                4'h0: seg = 7'b1000000; 
+                4'h1: seg = 7'b1111001; 
+                4'h2: seg = 7'b0100100; 
+                4'h3: seg = 7'b0110000; 
+                4'h4: seg = 7'b0011001; 
+                4'h5: seg = 7'b0010010; 
+                4'h6: seg = 7'b0000010; 
+                4'h7: seg = 7'b1111000; 
+                4'h8: seg = 7'b0000000; 
+                4'h9: seg = 7'b0010000; 
+                default: seg = 7'b1111111; // Blank for 4'hA
+            endcase
+        end
     end
-
 endmodule
