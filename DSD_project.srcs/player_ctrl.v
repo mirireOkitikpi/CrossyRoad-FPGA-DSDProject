@@ -2,8 +2,7 @@
 //////////////////////////////////////////////////////////////////////////////////
 // Module:      player_ctrl.v
 // Description: Controls chicken movement with discrete hops.
-//              Includes Log-riding logic and the Accelerometer FLICK JUMP.
-//              Fixed the "Stuck Flag" title screen bug.
+//              Includes Log-riding logic and the Accelerometer flick to jump.
 //////////////////////////////////////////////////////////////////////////////////
 
 module player_ctrl (
@@ -15,11 +14,9 @@ module player_ctrl (
     input             btn_right,
     input             game_active,
     
-    // Accelerometer Flag Handshake 
     input             flick_jump_flag,   
     output reg        clear_flick_flag,  
 
-    // Log riding inputs (from game_top) 
     input             log_carry_en,     
     input             log_carry_right,  
     input      [3:0]  log_carry_speed,  
@@ -32,18 +29,20 @@ module player_ctrl (
     output            carried_offscreen  
 );
 
-    localparam LANE_HEIGHT    = 11'd64;  
     localparam HOP_X          = 11'd32;
-    localparam CHICKEN_SIZE   = 11'd32;
     localparam SCREEN_LEFT    = 11'd4;
     localparam SCREEN_RIGHT   = 11'd1404;
-    
-    localparam GAME_TOP       = 11'd100; 
-    localparam GAME_BOTTOM    = 11'd484; 
-    localparam SCROLL_THRESH  = 11'd292; 
+
+    //absolute grid
+    localparam L0 = 11'd148;
+    localparam L1 = 11'd276;
+    localparam L2 = 11'd404;
+    localparam L3 = 11'd532;
+    localparam L4 = 11'd660;
+    localparam L5 = 11'd788;
 
     localparam START_X        = 11'd704;
-    localparam START_Y        = GAME_BOTTOM - LANE_HEIGHT; 
+    localparam START_Y        = L5; // Start exactly in the center of the bottom lane
 
     localparam FACE_UP    = 2'd0;
     localparam FACE_DOWN  = 2'd1;
@@ -78,20 +77,20 @@ module player_ctrl (
             is_moving        <= 1'b0;
             clear_flick_flag <= 1'b0; 
 
+            // Flick the board to jump across 2 lanes
             if (flick_jump_flag) begin
                 clear_flick_flag <= 1'b1; 
-                
                 if (game_active) begin
                     facing    <= FACE_UP;
                     is_moving <= 1'b1;
-                    
-                    if (chicken_y <= SCROLL_THRESH + LANE_HEIGHT)
-                        logical_world_y <= logical_world_y + (LANE_HEIGHT * 2);
-                    else if (chicken_y >= GAME_TOP + (LANE_HEIGHT * 2))
-                        chicken_y <= chicken_y - (LANE_HEIGHT * 2);
+                    if      (chicken_y == L5) chicken_y <= L3;
+                    else if (chicken_y == L4) chicken_y <= L2;
+                    else if (chicken_y == L3) begin chicken_y <= L2; logical_world_y <= logical_world_y + 11'd128; end
+                    else if (chicken_y <= L2) logical_world_y <= logical_world_y + 11'd256;
                 end
             end
-
+            
+            // normal movement (up, down,left,right, log)
             else if (game_active) begin
                 if (log_carry_en) begin
                     if (log_carry_right) begin
@@ -107,32 +106,31 @@ module player_ctrl (
                 if (btn_up_rise) begin
                     facing    <= FACE_UP;
                     is_moving <= 1'b1;
-                    if (chicken_y <= SCROLL_THRESH)
-                        logical_world_y <= logical_world_y + LANE_HEIGHT;
-                    else if (chicken_y >= GAME_TOP + LANE_HEIGHT)
-                        chicken_y <= chicken_y - LANE_HEIGHT;
+                    if      (chicken_y == L5) chicken_y <= L4;
+                    else if (chicken_y == L4) chicken_y <= L3;
+                    else if (chicken_y == L3) chicken_y <= L2;
+                    else if (chicken_y <= L2) logical_world_y <= logical_world_y + 11'd128;
                 end
                 else if (btn_down_rise) begin
                     facing    <= FACE_DOWN;
                     is_moving <= 1'b1;
-                    if (chicken_y + LANE_HEIGHT <= GAME_BOTTOM - LANE_HEIGHT)
-                        chicken_y <= chicken_y + LANE_HEIGHT;
+                    if      (chicken_y == L0) chicken_y <= L1;
+                    else if (chicken_y == L1) chicken_y <= L2;
+                    else if (chicken_y == L2) chicken_y <= L3;
+                    else if (chicken_y == L3) chicken_y <= L4;
+                    else if (chicken_y == L4) chicken_y <= L5;
                 end
                 else if (btn_left_rise) begin
                     facing    <= FACE_LEFT;
                     is_moving <= 1'b1;
-                    if (chicken_x >= SCREEN_LEFT + HOP_X)
-                        chicken_x <= chicken_x - HOP_X;
-                    else
-                        chicken_x <= SCREEN_LEFT;
+                    if (chicken_x >= SCREEN_LEFT + HOP_X) chicken_x <= chicken_x - HOP_X;
+                    else chicken_x <= SCREEN_LEFT;
                 end
                 else if (btn_right_rise) begin
                     facing    <= FACE_RIGHT;
                     is_moving <= 1'b1;
-                    if (chicken_x + HOP_X <= SCREEN_RIGHT)
-                        chicken_x <= chicken_x + HOP_X;
-                    else
-                        chicken_x <= SCREEN_RIGHT;
+                    if (chicken_x + HOP_X <= SCREEN_RIGHT) chicken_x <= chicken_x + HOP_X;
+                    else chicken_x <= SCREEN_RIGHT;
                 end
             end
         end
