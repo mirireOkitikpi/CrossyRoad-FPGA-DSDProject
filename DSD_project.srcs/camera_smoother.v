@@ -5,7 +5,7 @@ module camera_smoother (
     output reg [10:0] render_y
 );
 
-    localparam PAN_SPEED = 11'd4; 
+    localparam PAN_SPEED = 11'd8; 
 
     // Notice: 'negedge rst' is REMOVED from the sensitivity list.
     // This makes the reset synchronous, which allows us to load a dynamic variable!
