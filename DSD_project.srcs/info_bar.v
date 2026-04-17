@@ -1,31 +1,10 @@
 `timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
-// Module:      info_bar.v
+// Module:    info_bar.v
 // Description:
 //   Renders the mandatory 100-pixel-tall info bar across the full
 //   1440px display width. Uses the font_rom module to draw text
 //   at 2× scale (16×32 pixels per character) for readability.
-//
-//   Layout (left to right):
-//     [4px border]
-//     [CROSSY ROAD title]   - centred in left region
-//     [ID: XXXXXXX]         - student 1
-//     [ID: YYYYYYY]         - student 2
-//     [SCORE: NN]           - right region
-//     [lives indicator]     - heart symbols
-//     [4px border]
-//
-//   Text is rendered at 2× scale: each font pixel becomes a 2×2
-//   block on screen. This makes 8×16 glyphs appear as 16×32.
-//
-//   The info bar uses unique group colours (teal background with
-//   gold border) as required by the assignment specification.
-//
-// Ports:
-//   curr_x, curr_y   - current VGA pixel position
-//   score, lives      - game state for display
-//   pixel_r/g/b       - output colour for this pixel
-//   in_info_bar       - high when curr_y < 100 (for drawcon priority)
 //////////////////////////////////////////////////////////////////////////////////
 
 module info_bar (
@@ -55,37 +34,32 @@ module info_bar (
     localparam [11:0] COL_TEXT   = 12'hFFF;  // White text
     localparam [11:0] COL_SCORE  = 12'hFF0;  // Yellow score digits
     localparam [11:0] COL_HEART  = 12'hF24;  // Red hearts
-    localparam [11:0] COL_DEAD   = 12'hF44;  // Red "DEAD" text
+    localparam [11:0] COL_DEAD   = 12'hF44;  
 
-    // ──────────────────────────────────────────────────────────
     // Text string definitions (stored as arrays of 7-bit ASCII)
-    //
-    // CHANGE STUDENT IDS HERE:
-    //   Edit title_str, id1_str, id2_str below
-    // ──────────────────────────────────────────────────────────
 
     // Title: "CROSSY ROAD" (11 chars)
-    // Positioned: x=40, y=10, scale=2× → 11×16=176px wide, 32px tall
     localparam TITLE_X     = 11'd40;
     localparam TITLE_Y     = 11'd10;
-    localparam TITLE_LEN   = 5'd11;
+    localparam TITLE_LEN   = 5'd12;
     localparam TITLE_SCALE = 2;
 
-    // Stored as hex ASCII codes
-    wire [6:0] title_char [0:10];
+    wire [6:0] title_char [0:11];
+
     assign title_char[0]  = 7'h43; // C
     assign title_char[1]  = 7'h52; // R
     assign title_char[2]  = 7'h4F; // O
     assign title_char[3]  = 7'h53; // S
     assign title_char[4]  = 7'h53; // S
     assign title_char[5]  = 7'h59; // Y
-    assign title_char[6]  = 7'h20; // (space)
-    assign title_char[7]  = 7'h52; // R
-    assign title_char[8]  = 7'h4F; // O
+    assign title_char[6]  = 7'h20; // space
+    
+    assign title_char[7]  = 7'h43; // C
+    assign title_char[8]  = 7'h48; // H
     assign title_char[9]  = 7'h41; // A
-    assign title_char[10] = 7'h44; // D
+    assign title_char[10] = 7'h53; // S
+    assign title_char[11] = 7'h4D; // M
 
-    // Positioned: x=420, y=14, scale=2×
     localparam ID1_X   = 11'd420;
     localparam ID1_Y   = 11'd14;
     localparam ID1_LEN = 5'd10;
@@ -102,7 +76,6 @@ module info_bar (
     assign id1_char[8] = 7'h32; // 2
     assign id1_char[9] = 7'h31; // 1
 
-    // Positioned: x=420, y=52, scale=2×
     localparam ID2_X   = 11'd420;
     localparam ID2_Y   = 11'd52;
     localparam ID2_LEN = 5'd10;
@@ -117,7 +90,7 @@ module info_bar (
     assign id2_char[6] = 7'h33; // 3
     assign id2_char[7] = 7'h33; // 3
     assign id2_char[8] = 7'h38; // 8
-    assign id2_char[9] = 7'h31; // 1
+    assign id2_char[9] = 7'h30; // 0
 
     // Score label: "SCORE:" (6 chars) at x=800, y=14
     localparam SCR_LABEL_X   = 11'd800;
@@ -132,12 +105,13 @@ module info_bar (
     assign scr_label_char[4] = 7'h45; // E
     assign scr_label_char[5] = 7'h3A; // :
 
-    // Score digits: 2 chars at x=896, y=14 (right after "SCORE:")
+    // Score digits: Now 3 chars wide at x=896, y=14 
     localparam SCR_DIGIT_X = 11'd896;
     localparam SCR_DIGIT_Y = 11'd14;
 
-    wire [6:0] score_tens_char = 7'h30 + (score / 8'd10);  // ASCII '0' + tens
-    wire [6:0] score_ones_char = 7'h30 + (score % 8'd10);  // ASCII '0' + ones
+    wire [6:0] score_huns_char = 7'h30 + (score / 8'd100);             // Extracts 100s
+    wire [6:0] score_tens_char = 7'h30 + ((score / 8'd10) % 8'd10);    // Extracts 10s and caps at 9
+    wire [6:0] score_ones_char = 7'h30 + (score % 8'd10);              // Extracts 1s
 
     // Lives label: "LIVES:" (6 chars) at x=800, y=52
     localparam LIV_LABEL_X   = 11'd800;
@@ -145,7 +119,7 @@ module info_bar (
     localparam LIV_LABEL_LEN = 5'd6;
 
     wire [6:0] liv_label_char [0:5];
-    assign liv_label_char[0] = 7'h4C; // L - Note: Need L glyph
+    assign liv_label_char[0] = 7'h4C; // L 
     assign liv_label_char[1] = 7'h49; // I
     assign liv_label_char[2] = 7'h56; // V
     assign liv_label_char[3] = 7'h45; // E
@@ -161,22 +135,11 @@ module info_bar (
         .font_data (font_data)
     );
 
-    // ──────────────────────────────────────────────────────────
     // Text rendering helper function
-    // Given a pixel position and a text string's origin, returns
-    // the font ROM address and whether the pixel is in range.
-    //
-    // At 2× scale:
-    //   char_index = (curr_x - origin_x) / (8 * SCALE)
-    //   font_col   = ((curr_x - origin_x) / SCALE) % 8
-    //   font_row   = ((curr_y - origin_y) / SCALE) % 16
-    // ──────────────────────────────────────────────────────────
 
-    // Working registers for the pixel test 
     reg [11:0] pixel_colour;
     reg        pixel_on;
 
-    // Intermediate calculations 
     wire [10:0] dx_title    = curr_x - TITLE_X;
     wire [10:0] dy_title    = curr_y - TITLE_Y;
     wire        in_title    = (curr_x >= TITLE_X) &&
@@ -216,8 +179,9 @@ module info_bar (
 
     wire [10:0] dx_scrd     = curr_x - SCR_DIGIT_X;
     wire [10:0] dy_scrd     = curr_y - SCR_DIGIT_Y;
+    //Increased width to 3 * 16 to fit 3 digits
     wire        in_scr_digit= (curr_x >= SCR_DIGIT_X) &&
-                              (curr_x < SCR_DIGIT_X + 2 * 16) &&
+                              (curr_x < SCR_DIGIT_X + 3 * 16) &&
                               (curr_y >= SCR_DIGIT_Y) && (curr_y < SCR_DIGIT_Y + 32);
     wire [3:0]  scrd_idx    = dx_scrd / 16;
     wire [2:0]  scrd_col    = (dx_scrd / 2) % 8;
@@ -280,7 +244,9 @@ module info_bar (
             end
 
         end else if (in_scr_digit) begin
-            font_addr = {(scrd_idx == 0) ? score_tens_char : score_ones_char,
+            // Selects between 100s, 10s, and 1s depending on index
+            font_addr = {(scrd_idx == 0) ? score_huns_char :
+                         (scrd_idx == 1) ? score_tens_char : score_ones_char,
                          scrd_row};
             if (font_data[7 - scrd_col]) begin
                 pixel_colour = COL_SCORE;
