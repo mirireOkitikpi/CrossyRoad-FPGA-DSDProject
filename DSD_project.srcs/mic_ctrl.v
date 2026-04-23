@@ -22,7 +22,7 @@ module mic_ctrl (
     // The ADMP421 requires m_lrsel to be grounded to output data on the falling edge
     assign m_lrsel = 1'b0; 
 
-    // Generate the 2MHz Microphone Clock
+    // Generate the 2MHz Microphone Clock 
     // 100MHz / 50 = 2MHz (Toggle every 25 cycles)
     reg [5:0] clk_div;
     always @(posedge clk or negedge rst) begin
@@ -39,7 +39,7 @@ module mic_ctrl (
         end
     end
 
-    // Sample Data on Falling Edge of m_clk
+    // Sample Data on Falling Edge of m_clk 
     // We need to sample the m_data exactly when m_clk goes from 1 to 0
     reg m_clk_prev;
     wire sample_tick = (m_clk_prev == 1'b1 && m_clk == 1'b0);
@@ -48,7 +48,7 @@ module mic_ctrl (
         m_clk_prev <= m_clk;
     end
 
-    //PDM Density Counter
+    //  PDM Density Counter 
     // We will collect 65,536 samples. 
     // If silent, we should see ~32,768 ones. 
     // If loud, the ones count will swing wildly up or down.
