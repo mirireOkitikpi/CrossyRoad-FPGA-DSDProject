@@ -3,15 +3,10 @@
 // Module:      drawcon.v  (patched)
 //
 // Change vs previous revision:
-//   - Added `low_life_flash` input. When asserted (game_top drives this high
-//     during the "on phase" of a ~1 Hz toggle while lives==1), the ALIVE
-//     chicken branch of the priority mux substitutes dead_chk_pixel for
-//     chk_pixel. Net effect: at 1 life the chicken alternates between its
-//     live sprite and its corpse sprite, giving a strong visual warning.
-//   - sprite_flash (invuln flash, from hits) still suppresses the chicken
-//     entirely. low_life_flash does NOT override sprite_flash - they layer
-//     correctly because sprite_flash is only active during the 120-tick
-//     invuln window immediately after a hit.
+//   - REMOVED: dead_chicken BRAM and associated math to save FPGA memory.
+//   - UPDATED: low_life_flash now simply toggles the visibility of the standard
+//     chicken sprite (flashing it on and off) rather than swapping to a corpse.
+//   - UPDATED: Merged new BRAM dimensions for Game Over and Lava Bucket screens.
 //////////////////////////////////////////////////////////////////////////////////
 
 module drawcon (
@@ -30,7 +25,7 @@ module drawcon (
     input      [7:0]  score,
     input      [2:0]  lives,
     input             sprite_flash,
-    input             low_life_flash,      // NEW
+    input             low_life_flash,      // Toggles at ~1Hz when lives == 1
 
     input      [2:0]  lane_type_0,  lane_type_1,  lane_type_2,
     input      [2:0]  lane_type_3,  lane_type_4,  lane_type_5,
@@ -132,9 +127,9 @@ module drawcon (
     wire [14:0] gse_addr = (gse_row * 15'd320) + gse_col;
 
     wire [5:0] local_chk_col = curr_x - chicken_x;
-    wire [5:0] drawn_chk_col = (chicken_facing == 2'd3) ? (6'd55 - local_chk_col) : local_chk_col;
+    wire [5:0] drawn_chk_col = (chicken_facing == 2'd3) ? (6'd63 - local_chk_col) : local_chk_col;
     wire [5:0] chk_row = curr_y - chicken_y;
-    wire [11:0] chk_addr = (chk_row * 12'd56) + drawn_chk_col;
+    wire [11:0] chk_addr = (chk_row * 12'd64) + drawn_chk_col;
 
     wire [5:0] car_row_1 = curr_y - obs_y0;
 
@@ -165,31 +160,47 @@ module drawcon (
     wire [6:0]  river_row  = tile_row[6:0];
     wire [13:0] river_addr = {river_row, river_col};
 
-    wire [5:0] dead_chk_row = curr_y - chicken_y;
-    wire [11:0] dead_chk_addr = (dead_chk_row * 12'd64) + drawn_chk_col;
 
-    wire in_go_std = game_over && !death_by_chasm &&
-                     (curr_x >= 11'd150) && (curr_x < 11'd1290) &&
-                     (curr_y >= 11'd304) && (curr_y < 11'd596);
-    wire [9:0] go_std_x = (curr_x - 11'd150) >> 1;
-    wire [9:0] go_std_y = (curr_y - 11'd304) >> 1;
+    // ══════════════════════════════════════════════════════════
+    // SCALED GAME OVER SCREENS (2x Hardware Integer Scaling)
+    // ══════════════════════════════════════════════════════════
+
+    // ── 1. Standard Game Over Overlay (ROM: 570x142, Rendered: 1140x284) ──
+    // Centered at X: 150, Y: 308. 
+    wire in_go_std = game_over && !death_by_chasm && 
+                     (curr_x >= 11'd150) && (curr_x < 11'd1290) && 
+                     (curr_y >= 11'd308) && (curr_y < 11'd592);
+                     
+    wire [9:0] go_std_x = (curr_x - 11'd150) >> 1; // Divide by 2
+    wire [9:0] go_std_y = (curr_y - 11'd308) >> 1; // Divide by 2
+    
+    // Max addr = 141 * 570 + 569 = 80,939 -> 17 bits sufficient.
     wire [16:0] go_std_addr = (go_std_y * 17'd570) + go_std_x;
 
-    wire in_go_lava = game_over && death_by_chasm &&
-                      (curr_x >= 11'd363) && (curr_x < 11'd1077) &&
-                      (curr_y >= 11'd24) && (curr_y < 11'd876);
-    wire [9:0] go_lava_x = (curr_x - 11'd363) >> 1;
-    wire [9:0] go_lava_y = (curr_y - 11'd24) >> 1;
-    wire [17:0] go_lava_addr = (go_lava_y * 18'd357) + go_lava_x;
+    // ── 2. Lava Game Over Overlay (ROM: 189x409, Rendered: 378x818) ──
+    // Centered at X: 531, Y: 41. 
+    wire in_go_lava = game_over && death_by_chasm && 
+                      (curr_x >= 11'd531) && (curr_x < 11'd909) && 
+                      (curr_y >= 11'd41) && (curr_y < 11'd859);
+                      
+    wire [9:0] go_lava_x = (curr_x - 11'd531) >> 1; // Divide by 2
+    wire [9:0] go_lava_y = (curr_y - 11'd41) >> 1;  // Divide by 2
+    
+    // Max addr = 408 * 189 + 188 = 77,300 -> 17 bits sufficient.
+    wire [16:0] go_lava_addr = (go_lava_y * 17'd189) + go_lava_x;
 
-    wire [11:0] chk_pixel, dead_chk_pixel, car_pixel, log_pixel, gse_pixel;
+    // EXACT FILENAME BRAM INSTANTIATIONS
+    wire [11:0] chk_pixel, car_pixel, log_pixel, gse_pixel;
     wire [11:0] road_pixel, river_pixel, chasm_pixel;
     wire [11:0] go_std_pixel, go_lava_pixel;
 
-    sprite_rom #(.WIDTH(64),   .HEIGHT(56),  .MEM_FILE("dead_chicken_64x56.mem"))    dead_chk_rom (.clk(clk), .addr(dead_chk_addr), .data(dead_chk_pixel));
-    sprite_rom #(.WIDTH(570),  .HEIGHT(146), .MEM_FILE("game_over_screen.mem"))      go_std_rom   (.clk(clk), .addr(go_std_addr),   .data(go_std_pixel));
-    sprite_rom #(.WIDTH(357),  .HEIGHT(426), .MEM_FILE("fried_chicken_bucket.mem"))  go_lava_rom  (.clk(clk), .addr(go_lava_addr),  .data(go_lava_pixel));
-    sprite_rom #(.WIDTH(56),  .HEIGHT(64), .MEM_FILE("chicken_flipped_64x64.mem"))                 chicken_rom (.clk(clk), .addr(chk_addr),      .data(chk_pixel));
+    // DEAD CHICKEN REMOVED
+    
+    // ── UPDATED BRAM DIMENSIONS ──
+    sprite_rom #(.WIDTH(570),  .HEIGHT(142), .MEM_FILE("game_over_screen.mem"))      go_std_rom   (.clk(clk), .addr(go_std_addr),   .data(go_std_pixel));
+    sprite_rom #(.WIDTH(189),  .HEIGHT(409), .MEM_FILE("fried_chicken_bucket.mem"))  go_lava_rom  (.clk(clk), .addr(go_lava_addr),  .data(go_lava_pixel));
+    
+    sprite_rom #(.WIDTH(64),  .HEIGHT(64), .MEM_FILE("chick.mem"))                   chicken_rom (.clk(clk), .addr(chk_addr),      .data(chk_pixel));
     sprite_rom #(.WIDTH(128), .HEIGHT(64), .MEM_FILE("car_128x64.mem"))              car_rom     (.clk(clk), .addr(car_rom_addr),  .data(car_pixel));
     sprite_rom #(.WIDTH(192), .HEIGHT(64), .MEM_FILE("log_192x64.mem"))              log_rom     (.clk(clk), .addr(log_rom_addr),  .data(log_pixel));
     sprite_rom #(.WIDTH(320), .HEIGHT(64), .MEM_FILE("goose_FINAL_320x64_444.mem"))  goose_rom   (.clk(clk), .addr(gse_addr),      .data(gse_pixel));
@@ -205,7 +216,7 @@ module drawcon (
     reg [10:0] curr_y_d;
     reg [10:0] curr_x_d;
     reg o1_log_d, o2_log_d;
-    reg low_life_flash_d;    // NEW - register to stay aligned with pixel
+    reg low_life_flash_d;    
 
     always @(posedge clk) begin
         chk_in_d         <= chk_in;
@@ -223,7 +234,6 @@ module drawcon (
     end
 
     wire chk_transparent      = (chk_pixel      == 12'h000) || (chk_pixel      == 12'hF0F);
-    wire dead_chk_transparent = (dead_chk_pixel == 12'h000) || (dead_chk_pixel == 12'hF0F);
     wire car_transparent      = (car_pixel      == 12'h000) || (car_pixel      == 12'hF0F);
     wire log_transparent      = (log_pixel      == 12'h000) || (log_pixel      == 12'hF0F);
     wire gse_transparent      = (gse_pixel      == 12'h000) || (gse_pixel      == 12'hF0F);
@@ -247,10 +257,18 @@ module drawcon (
         info_b_d <= info_b;
     end
 
+    // ── Visibility Logic for Chicken ──
+    // Hide the chicken if we are invulnerable (sprite_flash) 
+    // OR if we have 1 life left and the flash cycle is high (low_life_flash_d),
+    // but keep it visible when game over is triggered so it doesn't disappear on death.
+    wire hide_chicken = sprite_flash || (low_life_flash_d && !game_over);
+    
+    // Only enter the chicken branch if it is meant to be visible AND the pixel isn't transparent
+    wire chk_layer_active = chk_in_d && !hide_chicken && !chk_transparent;
+
     // Priority pixel mux (painter's algorithm, front-to-back):
-    // game-over overlays > info bar > feathers > player > logs > cars > geese > lane bg.
     always @(*) begin
-        {draw_r, draw_g, draw_b} = 12'h000;
+        {draw_r, draw_g, draw_b} = 12'h000; // Default Black
 
         if (in_go_lava && go_lava_pixel != 12'hF0F && go_lava_pixel != 12'h000) begin
             {draw_r, draw_g, draw_b} = go_lava_pixel;
@@ -260,28 +278,11 @@ module drawcon (
             {draw_r, draw_g, draw_b} = {info_r_d, info_g_d, info_b_d};
         end else if (is_feather) begin
             {draw_r, draw_g, draw_b} = 12'hFFF;
-        end else if (chk_in_d && !sprite_flash) begin
-            // ── Alive-chicken branch with low-life flash + post-death overlay ──
-            if (game_over && !death_by_chasm) begin
-                // After death (non-chasm): show the dead sprite. Fall back to
-                // alive sprite if dead mask is transparent, so the corpse fills
-                // its whole 64×56 region cleanly.
-                if (dead_chk_row < 56 && !dead_chk_transparent)
-                    {draw_r, draw_g, draw_b} = dead_chk_pixel;
-                else if (!chk_transparent)
-                    {draw_r, draw_g, draw_b} = chk_pixel;
-            end else if (low_life_flash_d) begin
-                // ── NEW: lives==1 flash phase. Draw the corpse sprite in the
-                // same 64×56 region used by the death screen, falling back
-                // to the alive sprite for the bottom-of-body rows. This gives
-                // a strong "about to die" visual cue without a separate sprite.
-                if (dead_chk_row < 56 && !dead_chk_transparent)
-                    {draw_r, draw_g, draw_b} = dead_chk_pixel;
-                else if (!chk_transparent)
-                    {draw_r, draw_g, draw_b} = chk_pixel;
-            end else if (!chk_transparent) begin
-                {draw_r, draw_g, draw_b} = chk_pixel;
-            end
+        
+        // ── SIMPLIFIED CHICKEN LOGIC ──
+        end else if (chk_layer_active) begin
+            {draw_r, draw_g, draw_b} = chk_pixel;
+            
         end else if ((o1_log_d || o2_log_d) && !log_transparent) begin
             {draw_r, draw_g, draw_b} = log_pixel;
         end else if ((o1_in_d || o2_in_d) && !car_transparent) begin
